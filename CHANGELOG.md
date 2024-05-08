@@ -1,6 +1,11 @@
 CHANGELOG
 =========
 
+8.1
+---
+
+ * Add option `redis_cluster` to force cluster mode
+
 7.4
 ---
 

@@ -52,6 +52,7 @@ class Connection
         'retry_interval' => 0, //  Int, value in milliseconds (optional, default is 0)
         'persistent_id' => null, // String, persistent connection id (optional, default is NULL meaning not persistent)
         'ssl' => null, // see https://php.net/context.ssl
+        'redis_cluster' => false, // force use of cluster
     ];
 
     private \Redis|Relay|\RedisCluster|null $redis = null;
@@ -92,7 +93,7 @@ class Connection
             }
         }
 
-        if ((\is_array($host) && null === $sentinelMaster) || $redis instanceof \RedisCluster) {
+        if ((\is_array($host) && null === $sentinelMaster) || $redis instanceof \RedisCluster || filter_var($options['redis_cluster'], \FILTER_VALIDATE_BOOLEAN)) {
             $hosts = \is_string($host) ? [$host.':'.$port] : $host; // Always ensure we have an array
             $this->redisInitializer = static fn () => self::initializeRedisCluster($redis, $hosts, $auth, $options);
         } else {
