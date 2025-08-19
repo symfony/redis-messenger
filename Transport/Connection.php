@@ -766,6 +766,70 @@ class Connection
         return $this->redis;
     }
 
+    public function findAll(?int $limit = null): array
+    {
+        $redis = $this->getRedis();
+
+        try {
+            if (null === $limit) {
+                $range = $redis->xRange($this->stream, '-', '+');
+            } else {
+                $range = $redis->xRange($this->stream, '-', '+', $limit);
+            }
+        } catch (\RedisException|\Relay\Exception $e) {
+            throw new TransportException($e->getMessage(), 0, $e);
+        }
+
+        if (!$range) {
+            if ($error = $redis->getLastError() ?: null) {
+                $redis->clearLastError();
+            }
+
+            return [];
+        }
+
+        $messages = [];
+        foreach ($range as $id => $data) {
+            $messages[] = [
+                'id' => $id,
+                'data' => $data,
+            ];
+        }
+
+        return $messages;
+    }
+
+    public function find(mixed $id): ?array
+    {
+        if (!\is_string($id)) {
+            return null;
+        }
+
+        $redis = $this->getRedis();
+
+        try {
+            $range = $redis->xRange($this->stream, $id, $id, 1);
+        } catch (\RedisException|\Relay\Exception $e) {
+            throw new TransportException($e->getMessage(), 0, $e);
+        }
+
+        if (!$range) {
+            if ($error = $redis->getLastError() ?: null) {
+                $redis->clearLastError();
+            }
+
+            return null;
+        }
+
+        $data = current($range);
+        $messageId = key($range);
+
+        return [
+            'id' => $messageId,
+            'data' => $data,
+        ];
+    }
+
     public function close(): void
     {
         $this->redis = null;

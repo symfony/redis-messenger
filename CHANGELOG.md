@@ -5,6 +5,7 @@ CHANGELOG
 ---
 
  * Add option `cluster` to force cluster mode
+ * Implement the `ListableReceiverInterface` to enable listing and finding messages in Redis streams
 
 7.4
 ---

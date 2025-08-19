@@ -670,4 +670,96 @@ class ConnectionTest extends TestCase
 
         return (new \ReflectionFunction($initializer))->getStaticVariables();
     }
+
+    public function testFindAllReturnsAllMessages()
+    {
+        $redis = $this->createRedisMock();
+
+        $redis->expects($this->exactly(1))->method('xRange')
+            ->with('queue', '-', '+')
+            ->willReturn([
+                '1234567890-0' => ['message' => json_encode(['body' => 'test1', 'headers' => []])],
+                '1234567890-1' => ['message' => json_encode(['body' => 'test2', 'headers' => []])],
+            ]);
+
+        $connection = Connection::fromDsn('redis://localhost/queue', [], $redis);
+        $messages = $connection->findAll();
+
+        $this->assertCount(2, $messages);
+        $this->assertEquals('1234567890-0', $messages[0]['id']);
+        $this->assertEquals('1234567890-1', $messages[1]['id']);
+        $this->assertArrayHasKey('data', $messages[0]);
+        $this->assertArrayHasKey('data', $messages[1]);
+    }
+
+    public function testFindAllWithLimit()
+    {
+        $redis = $this->createRedisMock();
+
+        $redis->expects($this->exactly(1))->method('xRange')
+            ->with('queue', '-', '+', 1)
+            ->willReturn([
+                '1234567890-0' => ['message' => json_encode(['body' => 'test1', 'headers' => []])],
+            ]);
+
+        $connection = Connection::fromDsn('redis://localhost/queue', [], $redis);
+        $messages = $connection->findAll(1);
+
+        $this->assertCount(1, $messages);
+        $this->assertEquals('1234567890-0', $messages[0]['id']);
+    }
+
+    public function testFindAllWhenRedisExceptionOccurs()
+    {
+        $redis = $this->createRedisMock();
+
+        $redis->expects($this->exactly(1))->method('xRange')
+            ->with('queue', '-', '+')
+            ->willThrowException($exception = new \RedisException('Something went wrong'));
+
+        $connection = Connection::fromDsn('redis://localhost/queue', [], $redis);
+
+        $this->expectExceptionObject(new TransportException($exception->getMessage(), 0, $exception));
+        $connection->findAll();
+    }
+
+    public function testFindReturnsMessageById()
+    {
+        $redis = $this->createRedisMock();
+
+        $redis->expects($this->exactly(1))->method('xRange')
+            ->with('queue', '1234567890-0', '1234567890-0', 1)
+            ->willReturn([
+                '1234567890-0' => ['message' => json_encode(['body' => 'test1', 'headers' => []])],
+            ]);
+
+        $connection = Connection::fromDsn('redis://localhost/queue', [], $redis);
+        $message = $connection->find('1234567890-0');
+
+        $this->assertNotNull($message);
+        $this->assertEquals('1234567890-0', $message['id']);
+        $this->assertArrayHasKey('data', $message);
+    }
+
+    public function testFindReturnsNullForNonExistentMessage()
+    {
+        $redis = $this->createRedisMock();
+
+        $redis->expects($this->exactly(1))->method('xRange')
+            ->with('queue', '9999999999-0', '9999999999-0', 1)
+            ->willReturn([]);
+
+        $connection = Connection::fromDsn('redis://localhost/queue', [], $redis);
+        $message = $connection->find('9999999999-0');
+
+        $this->assertNull($message);
+    }
+
+    public function testFindReturnsNullForInvalidId()
+    {
+        $connection = Connection::fromDsn('redis://localhost/queue', [], $this->createRedisMock());
+        $message = $connection->find(123);
+
+        $this->assertNull($message);
+    }
 }
