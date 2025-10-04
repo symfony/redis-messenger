@@ -71,10 +71,6 @@ class Connection
 
     public function __construct(array $options, \Redis|Relay|\RedisCluster|null $redis = null)
     {
-        if (version_compare(phpversion('redis'), '4.3.0', '<')) {
-            throw new LogicException('The redis transport requires php-redis 4.3.0 or higher.');
-        }
-
         $options += self::DEFAULT_OPTIONS;
         $host = $options['host'];
         $port = $options['port'];
@@ -116,7 +112,7 @@ class Connection
                         }
 
                         try {
-                            if (\extension_loaded('redis') && version_compare(phpversion('redis'), '6.0.0-dev', '>=')) {
+                            if (\extension_loaded('redis')) {
                                 $params = [
                                     'host' => $host,
                                     'port' => $port,
@@ -701,7 +697,6 @@ class Connection
         }
 
         // Iterate through the stream. See https://redis.io/commands/xrange/#iterating-a-stream.
-        $useExclusiveRangeInterval = version_compare(phpversion('redis'), '6.2.0', '>=');
         $total = 0;
         while (true) {
             if (!$range = $redis->xRange($this->stream, $lastDeliveredId, '+', 100)) {
@@ -710,11 +705,7 @@ class Connection
 
             $total += \count($range);
 
-            if ($useExclusiveRangeInterval) {
-                $lastDeliveredId = preg_replace_callback('#\d+$#', static fn (array $matches) => (int) $matches[0] + 1, array_key_last($range));
-            } else {
-                $lastDeliveredId = '('.array_key_last($range);
-            }
+            $lastDeliveredId = preg_replace_callback('#\d+$#', static fn (array $matches) => (int) $matches[0] + 1, array_key_last($range));
         }
     }
 
