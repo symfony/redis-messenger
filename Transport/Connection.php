@@ -79,7 +79,7 @@ class Connection
         $sentinelMaster = $options['sentinel'] ?? $options['redis_sentinel'] ?? $options['sentinel_master'] ?? null;
 
         if (null !== $sentinelMaster && !class_exists(\RedisSentinel::class) && !class_exists(Sentinel::class)) {
-            throw new InvalidArgumentException('Redis Sentinel support requires ext-redis>=5.2, or ext-relay.');
+            throw new InvalidArgumentException('Redis Sentinel support requires ext-redis>=6.1, or ext-relay.');
         }
 
         if (null !== $sentinelMaster && $redis instanceof \RedisCluster) {
@@ -697,6 +697,7 @@ class Connection
         }
 
         // Iterate through the stream. See https://redis.io/commands/xrange/#iterating-a-stream.
+        $useExclusiveRangeInterval = version_compare(phpversion('redis'), '6.2.0', '>=');
         $total = 0;
         while (true) {
             if (!$range = $redis->xRange($this->stream, $lastDeliveredId, '+', 100)) {
@@ -705,7 +706,11 @@ class Connection
 
             $total += \count($range);
 
-            $lastDeliveredId = preg_replace_callback('#\d+$#', static fn (array $matches) => (int) $matches[0] + 1, array_key_last($range));
+            if ($useExclusiveRangeInterval) {
+                $lastDeliveredId = preg_replace_callback('#\d+$#', static fn (array $matches) => (int) $matches[0] + 1, array_key_last($range));
+            } else {
+                $lastDeliveredId = '('.array_key_last($range);
+            }
         }
     }
 
