@@ -59,27 +59,29 @@ class RedisReceiver implements KeepaliveReceiverInterface, MessageCountAwareInte
             return [];
         }
 
+        $stamps = [
+            new RedisReceivedStamp($message['id']),
+            new TransportMessageIdStamp($message['id']),
+        ];
+
         try {
             if (\array_key_exists('body', $redisEnvelope) && \array_key_exists('headers', $redisEnvelope)) {
-                $envelope = $this->serializer->decode([
+                $envelope = $this->serializer->decode($redisEnvelope = [
                     'body' => $redisEnvelope['body'],
                     'headers' => $redisEnvelope['headers'],
                 ]);
             } else {
                 $envelope = $this->serializer->decode($redisEnvelope);
             }
-        } catch (MessageDecodingFailedException $exception) {
-            $this->connection->reject($message['id']);
-
-            throw $exception;
+        } catch (MessageDecodingFailedException $e) {
+            return [
+                MessageDecodingFailedException::wrap($redisEnvelope, $e->getMessage(), $e->getCode(), $e)->with(...$stamps),
+            ];
         }
 
-        return [$envelope
-            ->withoutAll(TransportMessageIdStamp::class)
-            ->with(
-                new RedisReceivedStamp($message['id']),
-                new TransportMessageIdStamp($message['id'])
-            )];
+        return [
+            $envelope->withoutAll(TransportMessageIdStamp::class)->with(...$stamps),
+        ];
     }
 
     public function ack(Envelope $envelope): void

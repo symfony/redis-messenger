@@ -53,17 +53,17 @@ class RedisReceiverTest extends TestCase
     #[DataProvider('rejectedRedisEnvelopeProvider')]
     public function testItRejectTheMessageIfThereIsAMessageDecodingFailedException(array $redisEnvelope)
     {
-        $this->expectException(MessageDecodingFailedException::class);
-
         $serializer = $this->createStub(PhpSerializer::class);
         $serializer->method('decode')->willThrowException(new MessageDecodingFailedException());
 
-        $connection = $this->createMock(Connection::class);
+        $connection = $this->createStub(Connection::class);
         $connection->method('get')->willReturn($redisEnvelope);
-        $connection->expects($this->once())->method('reject');
 
         $receiver = new RedisReceiver($connection, $serializer);
-        $receiver->get();
+        $envelopes = $receiver->get();
+
+        $this->assertCount(1, $envelopes);
+        $this->assertInstanceOf(MessageDecodingFailedException::class, $envelopes[0]->getMessage());
     }
 
     public static function redisEnvelopeProvider(): \Generator
