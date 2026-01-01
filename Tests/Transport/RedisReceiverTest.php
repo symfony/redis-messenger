@@ -35,7 +35,7 @@ class RedisReceiverTest extends TestCase
      */
     public function testItReturnsTheDecodedMessageToTheHandler(array $redisEnvelope, $expectedMessage, SerializerInterface $serializer)
     {
-        $connection = $this->createMock(Connection::class);
+        $connection = $this->createStub(Connection::class);
         $connection->method('get')->willReturn($redisEnvelope);
 
         $receiver = new RedisReceiver($connection, $serializer);
@@ -58,7 +58,7 @@ class RedisReceiverTest extends TestCase
     {
         $this->expectException(MessageDecodingFailedException::class);
 
-        $serializer = $this->createMock(PhpSerializer::class);
+        $serializer = $this->createStub(PhpSerializer::class);
         $serializer->method('decode')->willThrowException(new MessageDecodingFailedException());
 
         $connection = $this->createMock(Connection::class);

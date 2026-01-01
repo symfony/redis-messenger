@@ -535,10 +535,11 @@ class ConnectionTest extends TestCase
     private function createRedisMock(): MockObject&\Redis
     {
         $redis = $this->createMock(\Redis::class);
-        $redis->expects($this->any())
+        $redis
+            ->expects($this->atLeastOnce())
             ->method('connect')
             ->willReturn(true);
-        $redis->expects($this->any())
+        $redis
             ->method('isConnected')
             ->willReturnOnConsecutiveCalls(false, true, true);
 
