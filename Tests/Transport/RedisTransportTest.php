@@ -32,7 +32,7 @@ class RedisTransportTest extends TestCase
     public function testReceivesMessages()
     {
         $transport = $this->getTransport(
-            $serializer = $this->createStub(SerializerInterface::class),
+            $serializer = $this->createMock(SerializerInterface::class),
             $connection = $this->createStub(Connection::class)
         );
 
@@ -48,7 +48,7 @@ class RedisTransportTest extends TestCase
             ],
         ];
 
-        $serializer->method('decode')->with(['body' => 'body', 'headers' => ['my' => 'header']])->willReturn(new Envelope($decodedMessage));
+        $serializer->expects($this->once())->method('decode')->with(['body' => 'body', 'headers' => ['my' => 'header']])->willReturn(new Envelope($decodedMessage));
         $connection->method('get')->willReturn($redisEnvelope);
 
         $envelopes = $transport->get();
