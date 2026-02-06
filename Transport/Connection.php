@@ -123,6 +123,10 @@ class Connection
                                     'readTimeout' => $options['read_timeout'],
                                 ];
 
+                                if (null !== $options['ssl'] && version_compare(phpversion('redis'), '6.2.0', '>=')) {
+                                    $params['ssl'] = $options['ssl'];
+                                }
+
                                 $sentinel = @new \RedisSentinel($params);
                             } else {
                                 $sentinel = @new $sentinelClass($host, $port, $options['timeout'], $options['persistent_id'], $options['retry_interval'], $options['read_timeout']);
