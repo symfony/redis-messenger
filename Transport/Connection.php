@@ -52,7 +52,7 @@ class Connection
         'retry_interval' => 0, //  Int, value in milliseconds (optional, default is 0)
         'persistent_id' => null, // String, persistent connection id (optional, default is NULL meaning not persistent)
         'ssl' => null, // see https://php.net/context.ssl
-        'redis_cluster' => false, // force use of cluster
+        'cluster' => false, // force use of cluster
     ];
 
     private \Redis|Relay|\RedisCluster|null $redis = null;
@@ -77,6 +77,7 @@ class Connection
         $port = $options['port'];
         $auth = $options['auth'];
 
+        $sentinelAuth = $options['sentinel_auth'] ?? null;
         $sentinelMaster = $options['sentinel'] ?? $options['redis_sentinel'] ?? $options['sentinel_master'] ?? null;
 
         if (null !== $sentinelMaster && !class_exists(\RedisSentinel::class) && !class_exists(Sentinel::class)) {
@@ -93,11 +94,11 @@ class Connection
             }
         }
 
-        if ((\is_array($host) && null === $sentinelMaster) || $redis instanceof \RedisCluster || filter_var($options['redis_cluster'], \FILTER_VALIDATE_BOOLEAN)) {
+        if ((\is_array($host) && null === $sentinelMaster) || $redis instanceof \RedisCluster || filter_var($options['cluster'], \FILTER_VALIDATE_BOOLEAN)) {
             $hosts = \is_string($host) ? [$host.':'.$port] : $host; // Always ensure we have an array
             $this->redisInitializer = static fn () => self::initializeRedisCluster($redis, $hosts, $auth, $options);
         } else {
-            $this->redisInitializer = static function () use ($redis, $sentinelMaster, $host, $port, $options, $auth) {
+            $this->redisInitializer = static function () use ($redis, $sentinelMaster, $host, $port, $options, $auth, $sentinelAuth) {
                 if (null !== $sentinelMaster) {
                     $sentinelClass = \extension_loaded('redis') ? \RedisSentinel::class : Sentinel::class;
                     $hostIndex = 0;
@@ -106,6 +107,7 @@ class Connection
                         $host = $hosts[$hostIndex]['host'];
                         $port = $hosts[$hostIndex]['port'] ?? 0;
                         $tls = 'tls' === $hosts[$hostIndex]['scheme'];
+                        $passAuth = null !== $sentinelAuth && (!\extension_loaded('redis') || \defined('Redis::OPT_NULL_MULTIBULK_AS_NULL'));
                         $address = false;
 
                         if (isset($hosts[$hostIndex]['host']) && $tls) {
@@ -123,13 +125,18 @@ class Connection
                                     'readTimeout' => $options['read_timeout'],
                                 ];
 
+                                if ($passAuth) {
+                                    $params['auth'] = $sentinelAuth;
+                                }
+
                                 if (null !== $options['ssl'] && version_compare(phpversion('redis'), '6.2.0', '>=')) {
                                     $params['ssl'] = $options['ssl'];
                                 }
 
                                 $sentinel = @new \RedisSentinel($params);
                             } else {
-                                $sentinel = @new $sentinelClass($host, $port, $options['timeout'], $options['persistent_id'], $options['retry_interval'], $options['read_timeout']);
+                                $extra = $passAuth ? [$sentinelAuth] : [];
+                                $sentinel = @new $sentinelClass($host, $port, $options['timeout'], $options['persistent_id'], $options['retry_interval'], $options['read_timeout'], ...$extra);
                             }
 
                             if ($address = @$sentinel->getMasterAddrByName($sentinelMaster)) {
@@ -264,7 +271,7 @@ class Connection
         }
 
         $options['sentinel'] ??= $options['redis_sentinel'] ?? $options['sentinel_master'] ?? null;
-        unset($options['redis_sentinel'], $options['sentinel_master']);
+        unset($options['redis_sentinel'], $options['sentinel_master'], $options['cluster']);
 
         if ($invalidOptions = array_diff(array_keys($options), array_keys(self::DEFAULT_OPTIONS), ['host', 'port'])) {
             throw new LogicException(\sprintf('Invalid option(s) "%s" passed to the Redis Messenger transport.', implode('", "', $invalidOptions)));
@@ -280,7 +287,14 @@ class Connection
 
         $pass = '' !== ($params['pass'] ?? '') ? rawurldecode($params['pass']) : null;
         $user = '' !== ($params['user'] ?? '') ? rawurldecode($params['user']) : null;
-        $options['auth'] ??= null !== $pass && null !== $user ? [$user, $pass] : ($pass ?? $user);
+        $auth = null !== $pass && null !== $user ? [$user, $pass] : ($pass ?? $user);
+        if (null === $options['sentinel']) {
+            $options['auth'] ??= $auth;
+            $options['sentinel_auth'] = null;
+        } else {
+            $options['sentinel_auth'] = $options['auth'] ?? null;
+            $options['auth'] = $auth ?? $options['auth'];
+        }
 
         if (isset($params['query'])) {
             parse_str($params['query'], $query);
