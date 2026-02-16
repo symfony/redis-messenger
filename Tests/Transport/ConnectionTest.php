@@ -75,7 +75,7 @@ class ConnectionTest extends TestCase
             ->method('connect')
             ->with('tls://127.0.0.1', 6379)
             ->willReturn(true);
-        $redis->expects($this->any())
+        $redis
             ->method('isConnected')
             ->willReturnOnConsecutiveCalls(false, true);
 
