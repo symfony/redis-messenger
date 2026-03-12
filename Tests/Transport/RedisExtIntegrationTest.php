@@ -56,7 +56,7 @@ class RedisExtIntegrationTest extends TestCase
                 'body' => '{"message": "Hi"}',
                 'headers' => ['type' => DummyMessage::class],
             ]),
-        ], $message['data']);
+        ], $message[0]['data']);
     }
 
     public function testGetTheFirstAvailableMessage()
@@ -69,14 +69,14 @@ class RedisExtIntegrationTest extends TestCase
                 'body' => '{"message": "Hi1"}',
                 'headers' => ['type' => DummyMessage::class],
             ]),
-        ], $message['data']);
+        ], $message[0]['data']);
         $message = $this->connection->get();
         $this->assertEquals([
             'message' => json_encode([
                 'body' => '{"message": "Hi2"}',
                 'headers' => ['type' => DummyMessage::class],
             ]),
-        ], $message['data']);
+        ], $message[0]['data']);
     }
 
     public function testConnectionSendWithSameContent()
@@ -93,7 +93,7 @@ class RedisExtIntegrationTest extends TestCase
                 'body' => $body,
                 'headers' => $headers,
             ]),
-        ], $message['data']);
+        ], $message[0]['data']);
 
         $message = $this->connection->get();
         $this->assertEquals([
@@ -101,7 +101,7 @@ class RedisExtIntegrationTest extends TestCase
                 'body' => $body,
                 'headers' => $headers,
             ]),
-        ], $message['data']);
+        ], $message[0]['data']);
     }
 
     public function testConnectionSendAndGetDelayed()
@@ -116,7 +116,7 @@ class RedisExtIntegrationTest extends TestCase
                 'body' => '{"message": "Hi"}',
                 'headers' => ['type' => DummyMessage::class],
             ]),
-        ], $message['data']);
+        ], $message[0]['data']);
     }
 
     public function testConnectionSendDelayedMessagesWithSameContent()
@@ -133,7 +133,7 @@ class RedisExtIntegrationTest extends TestCase
                 'body' => $body,
                 'headers' => $headers,
             ]),
-        ], $message['data']);
+        ], $message[0]['data']);
 
         $message = $this->connection->get();
         $this->assertEquals([
@@ -141,7 +141,7 @@ class RedisExtIntegrationTest extends TestCase
                 'body' => $body,
                 'headers' => $headers,
             ]),
-        ], $message['data']);
+        ], $message[0]['data']);
     }
 
     public function testConnectionBelowRedeliverTimeout()
@@ -206,8 +206,8 @@ class RedisExtIntegrationTest extends TestCase
                 'body' => $body1,
                 'headers' => $headers,
             ]),
-        ], $message['data']);
-        $connection->ack($message['id']);
+        ], $message[0]['data']);
+        $connection->ack($message[0]['id']);
 
         // Queue will return the second message
         $message = $connection->get();
@@ -216,8 +216,8 @@ class RedisExtIntegrationTest extends TestCase
                 'body' => $body2,
                 'headers' => $headers,
             ]),
-        ], $message['data']);
-        $connection->ack($message['id']);
+        ], $message[0]['data']);
+        $connection->ack($message[0]['id']);
     }
 
     #[DataProvider('sentinelOptionNames')]
@@ -245,8 +245,8 @@ class RedisExtIntegrationTest extends TestCase
                 'body' => '1',
                 'headers' => [],
             ]),
-        ], $message['data']);
-        $connection->reject($message['id']);
+        ], $message[0]['data']);
+        $connection->reject($message[0]['id']);
         $connection->cleanup();
     }
 
@@ -282,8 +282,8 @@ class RedisExtIntegrationTest extends TestCase
                 'body' => '1',
                 'headers' => [],
             ]),
-        ], $message['data']);
-        $connection->reject($message['id']);
+        ], $message[0]['data']);
+        $connection->reject($message[0]['id']);
         $connection->cleanup();
     }
 
@@ -300,8 +300,8 @@ class RedisExtIntegrationTest extends TestCase
                 'body' => '1',
                 'headers' => [],
             ]),
-        ], $message['data']);
-        $connection->reject($message['id']);
+        ], $message[0]['data']);
+        $connection->reject($message[0]['id']);
         $connection->cleanup();
     }
 
@@ -319,8 +319,8 @@ class RedisExtIntegrationTest extends TestCase
                     'body' => '1',
                     'headers' => [],
                 ]),
-            ], $message['data']);
-            $connection->reject($message['id']);
+            ], $message[0]['data']);
+            $connection->reject($message[0]['id']);
         } finally {
             $redis->unlink('messenger-lazy');
         }
@@ -373,7 +373,7 @@ class RedisExtIntegrationTest extends TestCase
             $this->assertNull($connection->get()); // no message, should return null immediately
             $connection->add('1', []);
             $this->assertNotEmpty($message = $connection->get());
-            $connection->reject($message['id']);
+            $connection->reject($message[0]['id']);
         } finally {
             $redis->unlink('messenger-getnonblocking');
         }
@@ -390,7 +390,7 @@ class RedisExtIntegrationTest extends TestCase
             $connection->add('2', []);
 
             $failing = $connection->get();
-            $connection->reject($failing['id']);
+            $connection->reject($failing[0]['id']);
 
             $connection = Connection::fromDsn('redis://localhost/messenger-rejectthenget', ['sentinel' => null], $redis);
             $this->assertNotNull($connection->get());
@@ -435,12 +435,12 @@ class RedisExtIntegrationTest extends TestCase
         $this->assertSame(3, $this->connection->getMessageCount());
 
         $message = $this->connection->get();
-        $this->connection->ack($message['id']);
+        $this->connection->ack($message[0]['id']);
 
         $this->assertSame(2, $this->connection->getMessageCount());
 
         $message = $this->connection->get();
-        $this->connection->reject($message['id']);
+        $this->connection->reject($message[0]['id']);
 
         $this->assertSame(1, $this->connection->getMessageCount());
     }

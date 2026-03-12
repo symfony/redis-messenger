@@ -161,6 +161,33 @@ class ConnectionTest extends TestCase
         $this->assertNotNull($connection->get());
     }
 
+    public function testGetUsesFetchSizeWhenProvided()
+    {
+        $redis = $this->createRedisMock();
+
+        $redis->expects($this->once())->method('xreadgroup')
+            ->willReturnCallback(function (...$args) {
+                static $series = [
+                    [['symfony', 'consumer', ['queue' => '0'], 5, 1], ['queue' => [
+                        '1-0' => ['message' => json_encode(['body' => 'First', 'headers' => []])],
+                        '2-0' => ['message' => json_encode(['body' => 'Second', 'headers' => []])],
+                    ]]],
+                ];
+
+                [$expectedArgs, $return] = array_shift($series);
+                $this->assertSame($expectedArgs, $args);
+
+                return $return;
+            })
+        ;
+
+        $connection = Connection::fromDsn('redis://localhost/queue', [], $redis);
+        $messages = $connection->get(5);
+
+        $this->assertSame('1-0', $messages[0]['id']);
+        $this->assertSame('2-0', $messages[1]['id']);
+    }
+
     #[DataProvider('provideAuthDsn')]
     public function testAuth(string|array $expected, string $dsn)
     {
@@ -330,15 +357,13 @@ class ConnectionTest extends TestCase
         $connection = Connection::fromDsn('redis://localhost/queue', [], $redis);
         $message = $connection->get();
 
+        $this->assertSame(0, $message[0]['id']);
         $this->assertSame([
-            'id' => 0,
-            'data' => [
-                'message' => json_encode([
-                    'body' => '1',
-                    'headers' => [],
-                ]),
-            ],
-        ], $message);
+            'message' => json_encode([
+                'body' => '1',
+                'headers' => [],
+            ]),
+        ], $message[0]['data']);
     }
 
     public function testClaimAbandonedMessageWithRaceCondition()

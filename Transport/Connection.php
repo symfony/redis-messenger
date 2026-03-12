@@ -69,6 +69,8 @@ class Connection
     private bool $deleteAfterAck;
     private bool $deleteAfterReject;
     private bool $couldHavePendingMessages = true;
+    /** @var list<array{id: string, data: mixed}> */
+    private array $buffer = [];
 
     public function __construct(array $options, \Redis|Relay|\RedisCluster|null $redis = null)
     {
@@ -426,11 +428,17 @@ class Connection
         $this->nextClaim = microtime(true) + $this->claimInterval;
     }
 
-    public function get(): ?array
+    /**
+     * @return list<array{id: string, data: mixed}>|null
+     */
+    public function get(int $fetchSize = 1): ?array
     {
+        $fetchSize = max(1, $fetchSize);
+
         if ($this->autoSetup) {
             $this->setup();
         }
+
         $now = microtime();
         $now = substr($now, 11).substr($now, 2, 3);
 
@@ -462,48 +470,78 @@ class Connection
             $this->claimOldPendingMessages();
         }
 
-        $messageId = '>'; // will receive new messages
+        $messages = $this->getPendingMessages($fetchSize);
 
-        if ($this->couldHavePendingMessages) {
-            $messageId = '0'; // will receive consumers pending messages
+        if (\count($messages) >= $fetchSize) {
+            return $messages;
         }
+
         $redis = $this->getRedis();
 
-        try {
-            $messages = $redis->xreadgroup(
-                $this->group,
-                $this->consumer,
-                [$this->stream => $messageId],
-                1,
-                1
-            );
-        } catch (\RedisException|\Relay\Exception $e) {
-            throw new TransportException($e->getMessage(), 0, $e);
-        }
-
-        if (false === $messages) {
-            if ($error = $redis->getLastError() ?: null) {
-                $redis->clearLastError();
+        while (true) {
+            if (!$this->couldHavePendingMessages && $this->nextClaim <= microtime(true)) {
+                $this->claimOldPendingMessages();
             }
 
-            throw new TransportException($error ?? 'Could not read messages from the redis stream.');
+            $messageId = $this->couldHavePendingMessages ? '0' : '>';
+
+            try {
+                $streamMessages = $redis->xreadgroup(
+                    $this->group,
+                    $this->consumer,
+                    [$this->stream => $messageId],
+                    $fetchSize,
+                    1
+                );
+            } catch (\RedisException|\Relay\Exception $e) {
+                throw new TransportException($e->getMessage(), 0, $e);
+            }
+
+            if (false === $streamMessages) {
+                if ($error = $redis->getLastError() ?: null) {
+                    $redis->clearLastError();
+                }
+
+                throw new TransportException($error ?? 'Could not read messages from the redis stream.');
+            }
+
+            if ($this->couldHavePendingMessages && empty($streamMessages[$this->stream])) {
+                $this->couldHavePendingMessages = false;
+
+                continue;
+            }
+
+            foreach ($streamMessages[$this->stream] ?? [] as $key => $message) {
+                $this->buffer[] = [
+                    'id' => $key,
+                    'data' => $message,
+                ];
+            }
+
+            break;
         }
 
-        if ($this->couldHavePendingMessages && empty($messages[$this->stream])) {
-            $this->couldHavePendingMessages = false;
+        $messages = [...$messages, ...$this->getPendingMessages($fetchSize - \count($messages))];
 
-            // No pending messages so get a new one
-            return $this->get();
+        if (!$messages) {
+            return null;
         }
 
-        foreach ($messages[$this->stream] ?? [] as $key => $message) {
-            return [
-                'id' => $key,
-                'data' => $message,
-            ];
+        return $messages;
+    }
+
+    /**
+     * @return list<array{id: string, data: mixed}>
+     */
+    private function getPendingMessages(int $fetchSize): array
+    {
+        $messages = [];
+
+        while ($fetchSize-- > 0 && $this->buffer) {
+            $messages[] = array_shift($this->buffer);
         }
 
-        return null;
+        return $messages;
     }
 
     public function ack(string $id): void
