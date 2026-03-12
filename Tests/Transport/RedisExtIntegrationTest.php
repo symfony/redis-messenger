@@ -443,6 +443,35 @@ class RedisExtIntegrationTest extends TestCase
         $this->assertSame(1, $this->connection->getMessageCount());
     }
 
+    public function testPendingMessagesAreNotReturnedAsDuplicatesBeforeAck()
+    {
+        $this->connection->add('{"message": "1"}', ['type' => DummyMessage::class]);
+        $this->connection->add('{"message": "2"}', ['type' => DummyMessage::class]);
+        $this->connection->add('{"message": "3"}', ['type' => DummyMessage::class]);
+
+        // Fetch all 3 without acking — simulates a batch handler collecting messages.
+        // The old code would return msg-1 three times because it always read from ID '0'.
+        $msg1 = $this->connection->get();
+        $msg2 = $this->connection->get();
+        $msg3 = $this->connection->get();
+
+        $this->assertNotNull($msg1);
+        $this->assertNotNull($msg2);
+        $this->assertNotNull($msg3);
+
+        $ids = [$msg1['id'], $msg2['id'], $msg3['id']];
+        $this->assertCount(3, array_unique($ids), 'Each get() must return a distinct message, not duplicates');
+
+        // After all pending are consumed, next get() must return null (no new messages)
+        $this->assertNull($this->connection->get());
+
+        $this->connection->ack($msg1['id']);
+        $this->connection->ack($msg2['id']);
+        $this->connection->ack($msg3['id']);
+
+        $this->assertNull($this->connection->get());
+    }
+
     private function getConnectionGroup(Connection $connection): string
     {
         $property = (new \ReflectionClass(Connection::class))->getProperty('group');
