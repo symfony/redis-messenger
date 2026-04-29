@@ -546,7 +546,7 @@ class ConnectionTest extends TestCase
         $redis = $this->createRedisMock();
         $redis->expects($this->atLeastOnce())->method($method)->willReturn($return);
 
-        $id = Connection::fromDsn(dsn: 'redis://localhost/queue', redis: $redis)->add('body', [], $delay);
+        $id = Connection::fromDsn('redis://localhost/queue', [], $redis)->add('body', [], $delay);
 
         $this->assertMatchesRegularExpression($expected, $id);
     }
