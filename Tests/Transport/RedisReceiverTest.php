@@ -115,6 +115,27 @@ class RedisReceiverTest extends TestCase
         $this->assertEquals(new DummyMessage('Hello'), $envelopes[1]->getMessage());
     }
 
+    public function testGetRefetchesAfterAllNullDataBatchWithoutGrowingTheStack()
+    {
+        $connection = $this->createMock(Connection::class);
+        $connection->expects($this->exactly(2))
+            ->method('get')
+            ->willReturnOnConsecutiveCalls(
+                [
+                    ['id' => '1', 'data' => null],
+                    ['id' => '2', 'data' => null],
+                ],
+                null,
+            );
+        $connection->expects($this->exactly(2))->method('reject');
+
+        $receiver = new RedisReceiver($connection, new Serializer(
+            new SerializerComponent\Serializer([new ObjectNormalizer()], ['json' => new JsonEncoder()])
+        ));
+
+        $this->assertSame([], $receiver->get());
+    }
+
     #[DataProvider('rejectedRedisEnvelopeProvider')]
     public function testItRejectTheMessageIfThereIsAMessageDecodingFailedException(array $redisEnvelope)
     {
