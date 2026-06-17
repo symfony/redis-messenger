@@ -14,6 +14,7 @@ namespace Symfony\Component\Messenger\Bridge\Redis\Transport;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\Transport\CloseableTransportInterface;
 use Symfony\Component\Messenger\Transport\Receiver\KeepaliveReceiverInterface;
+use Symfony\Component\Messenger\Transport\Receiver\ListableReceiverInterface;
 use Symfony\Component\Messenger\Transport\Receiver\MessageCountAwareInterface;
 use Symfony\Component\Messenger\Transport\Serialization\PhpSerializer;
 use Symfony\Component\Messenger\Transport\Serialization\SerializerInterface;
@@ -24,7 +25,7 @@ use Symfony\Component\Messenger\Transport\TransportInterface;
  * @author Alexander Schranz <alexander@sulu.io>
  * @author Antoine Bluchet <soyuka@gmail.com>
  */
-class RedisTransport implements TransportInterface, KeepaliveReceiverInterface, SetupableTransportInterface, CloseableTransportInterface, MessageCountAwareInterface
+class RedisTransport implements TransportInterface, KeepaliveReceiverInterface, SetupableTransportInterface, CloseableTransportInterface, MessageCountAwareInterface, ListableReceiverInterface
 {
     private SerializerInterface $serializer;
     private RedisReceiver $receiver;
@@ -75,6 +76,16 @@ class RedisTransport implements TransportInterface, KeepaliveReceiverInterface, 
     public function getMessageCount(): int
     {
         return $this->getReceiver()->getMessageCount();
+    }
+
+    public function all(?int $limit = null): iterable
+    {
+        return $this->getReceiver()->all($limit);
+    }
+
+    public function find(mixed $id): ?Envelope
+    {
+        return $this->getReceiver()->find($id);
     }
 
     public function close(): void
